@@ -1,0 +1,6 @@
+rootProject.name='gradle-go-build'
+
+include 'hello-go-gradle'
+include 'hello-make'
+include 'hello-mage'
+

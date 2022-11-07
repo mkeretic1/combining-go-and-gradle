@@ -1,0 +1,21 @@
+static def extractOsAndArch(platform) {
+  def parts = platform.split("-");
+  return [parts[0], parts[1]]
+}
+
+task goBuild {
+  def targetPlatform = [
+      'darwin-amd64','linux-amd64', 'windows-amd64'
+  ]
+
+  doLast {
+    targetPlatform.each { platform ->
+      def (os, arch) = extractOsAndArch(platform)
+
+      exec {
+        workingDir project.projectDir
+        commandLine "make", "build", "GOOS=${os}", "GOARCH=${arch}", "PROJECT_NAME=${project.name}", "PROJECT_BUILD_DIR=${project.buildDir}/plugin"
+      }
+    }
+  }
+}

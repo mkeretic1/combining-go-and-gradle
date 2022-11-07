@@ -1,0 +1,181 @@
+import org.apache.tools.ant.filters.ReplaceTokens
+
+plugins {
+  id "pl.allegro.tech.build.axion-release" version "$axionReleasePluginVersion"
+  id "com.bmuschko.docker-remote-api" version "$dockerRemoteApiPluginVersion"
+}
+
+apply plugin: 'base'
+apply plugin: 'idea'
+
+// Import task types
+import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+import com.bmuschko.gradle.docker.tasks.image.DockerPushImage
+import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
+import com.bmuschko.gradle.docker.tasks.image.DockerTagImage
+
+ext {
+  xlrplugin = [
+      docker: [
+          registries: [
+              local : [
+                  name        : 'local',
+                  organization: "mkeretic",
+                  url         : 'localhost:5050'
+              ]
+          ]
+      ]
+  ]
+}
+
+scmVersion {
+  tag {
+    prefix = 'v'
+  }
+}
+
+allprojects {
+  project.version = scmVersion.version
+
+  apply plugin: "idea"
+
+  idea {
+    module {
+      excludeDirs += [
+        file('.gradle/'),
+        file('.gogradle/'),
+        file('build/'),
+        file('out/'),
+        file('log/'),
+        file('work/'),
+        file('db/')
+      ]
+      downloadJavadoc = true
+      downloadSources = true
+    }
+  }
+
+}
+
+task processIdeaResources
+task buildPlugins
+
+subprojects { sp ->
+  apply plugin: "maven-publish"
+  apply plugin: "java"
+  apply plugin: "com.bmuschko.docker-remote-api"
+
+  group = 'com.xebialabs.xlrelease.test'
+  targetCompatibility = JavaVersion.VERSION_11
+
+  // only for idea as it does not processResources correctly with ReplaceTokens
+  task processPluginIdeaResources(type: Copy) {
+    description("Copy Gradle build resources to idea out folder")
+    dependsOn("processResources")
+    from "${project.buildDir}/resources/main"
+    into "out/production/resources"
+  }
+
+  processIdeaResources.dependsOn("${sp.path}:processPluginIdeaResources")
+  buildPlugins.dependsOn("${sp.path}:build")
+  publish.dependsOn("${sp.path}:githubPublishImageToRegistry")
+
+  // -Pregistry=local
+  def imageRegistry = xlrplugin.docker.registries[project.findProperty("registry") ?: "local"]
+
+  processResources {
+    filesMatching('**/synthetic.xml') {
+      filter(ReplaceTokens, tokens: [
+          'project.version': project.version,
+          'project.name'   : project.name,
+          'registry.url'   : imageRegistry.url,
+          'registry.org'   : imageRegistry.organization
+      ])
+    }
+  }
+
+  build.dependsOn 'goBuild'
+
+  task copyPluginBinary(type: Copy) {
+    from "${project.buildDir}/plugin/linux-amd64"
+    into "${project.buildDir}/docker/"
+  }
+
+  task copyDockerFile(type: Copy) {
+    from "${projectDir}/Dockerfile"
+    into "${project.buildDir}/docker/"
+  }
+
+  xlrplugin.docker.registries.each { registryKey, registry ->
+    // for multi-arch images see https://www.chrisrichardson.net/post/microservices/2022/01/16/build-multi-arch-docker-images-locally.html
+    def buildPluginImage = tasks.register("${registry.name}BuildPluginImage", DockerBuildImage) {
+      dependsOn(copyPluginBinary, copyDockerFile)
+      labels.put('product', 'release')
+      labels.put('pluginVersion', project.version)
+      labels.put('pluginName', project.name)
+      images.add("${registry.organization}/${project.name}:${project.version}")
+    }
+
+    if (registry?.url) {
+      def tagImage = tasks.register("${registry.name}TagImageForRegistry", DockerTagImage) {
+        dependsOn(buildPluginImage)
+        targetImageId buildPluginImage.get().getImageId()
+        repository = "${registry.url}/${registry.organization}/${project.name}"
+        tag = "${project.version}"
+      }
+
+      def pushImageToRegistry = tasks.register("${registry.name}PushImageToRegistry", DockerPushImage) {
+        dependsOn(tagImage)
+        images = ["${registry.url}/${registry.organization}/${project.name}:${project.version}"]
+        if (registry?.credentials) {
+          registryCredentials.username = registry.credentials.username
+          registryCredentials.password = registry.credentials.password
+        }
+      }
+
+      def cleanBaseImage = tasks.register("${registry.name}CleanBaseImageFromLocalDocker", DockerRemoveImage) {
+        imageId = "${registry.organization}/${project.name}:${project.version}"
+      }
+
+      def cleanImage = tasks.register("${registry.name}CleanImageFromLocalDocker", DockerRemoveImage) {
+        imageId = "${registry.url}/${registry.organization}/${project.name}:${project.version}"
+      }
+
+      def publishTask = tasks.register("${registry.name}PublishImageToRegistry") {
+        dependsOn([pushImageToRegistry, cleanImage, cleanBaseImage])
+      }
+
+      pushImageToRegistry.get().finalizedBy(
+          cleanBaseImage, cleanImage
+      )
+    }
+  }
+
+  build.dependsOn 'localBuildPluginImage'
+
+  publishing {
+    publications {
+      xlrPlugin(MavenPublication) {
+        from project.components.java
+      }
+    }
+    repositories {
+      maven {
+        name = "XebiaLabs"
+        url = "https://nexus.xebialabs.com/nexus/content/repositories/alphas"
+        credentials {
+          username = System.getenv("NEXUS_CI_USER")
+          password = System.getenv("NEXUS_CI_USER_PWD")
+        }
+      }
+      maven {
+        name = "GitHub"
+        url = project.findProperty("github_packages_registry_url")
+        credentials {
+          username = System.getenv("GH_USER_NAME")
+          password = System.getenv("GH_PACKAGES_UPLOAD_TOKEN")
+        }
+      }
+    }
+  }
+}

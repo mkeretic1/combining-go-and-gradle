@@ -1,0 +1,28 @@
+<synthetic xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns="http://www.xebialabs.com/deployit/synthetic"
+           xsi:schemaLocation="http://www.xebialabs.com/deployit/synthetic synthetic.xsd">
+
+    <type type="container.HelloDocker" extends="xlrelease.ContainerTask">
+        <!-- required capabilities required by all of the tasks-->
+        <property name="defaultRequiredCapabilities" default="container" required="true" kind="set_of_string" hidden="true" transient="true"/>
+
+        <!-- task UI properties -->
+        <property name="iconLocation" default="docker/docker.png" hidden="true"/>
+
+        <!-- container image - location of the task logic -->
+        <property name="image" required="true" hidden="true" default="@registry.url@/@registry.org@/@project.name@:@project.version@" />
+        <property name="registryUrl" required="true" hidden="true" default="@registry.url@" />
+
+        <!-- task properties -->
+        <property name="message" category="input" default="Hello world" />
+
+        <property name="response" kind="string" category="output" />
+        <property name="responseInt" kind="integer" category="output" />
+        <property name="responseBool" kind="boolean" category="output" />
+        <property name="responseDate" kind="date" category="output" />
+        <property name="responseListString" kind="list_of_string" category="output" />
+        <property name="responseSetString" kind="set_of_string" category="output" />
+        <property name="responseMapStringString" kind="map_string_string" category="output" />
+    </type>
+
+</synthetic>

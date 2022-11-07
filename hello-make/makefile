@@ -1,0 +1,4 @@
+.PHONY: build
+
+build:
+	env GOOS=${GOOS} GOARCH=${GOARCH} CGO_ENABLED=0 go build -o ${PROJECT_BUILD_DIR}/${GOOS}-${GOARCH}/${PROJECT_NAME}

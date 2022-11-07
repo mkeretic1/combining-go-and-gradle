@@ -1,0 +1,23 @@
+static def extractOsAndArch(platform) {
+  def parts = platform.split("-");
+  return [parts[0], parts[1]]
+}
+
+def mage = "/home/user/go/bin/mage"
+
+task goBuild {
+  def targetPlatform = [
+      'darwin-amd64','linux-amd64', 'windows-amd64'
+  ]
+
+  doLast {
+    targetPlatform.each { platform ->
+      def (os, arch) = extractOsAndArch(platform)
+
+      exec {
+        workingDir project.projectDir
+        commandLine mage, "exec", os, arch, "${project.buildDir}/plugin", project.name
+      }
+    }
+  }
+}
