@@ -16,7 +16,7 @@ task goBuild {
 
       exec {
         workingDir project.projectDir
-        commandLine mage, "exec", os, arch, "${project.buildDir}/plugin", project.name
+        commandLine mage, "build", os, arch, "${project.buildDir}/plugin", project.name
       }
     }
   }
