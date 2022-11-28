@@ -1,7 +1,6 @@
 package k8s
 
 import (
-	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"k8s.io/client-go/kubernetes"
@@ -35,8 +34,4 @@ func GetClientSet() (*kubernetes.Clientset, error) {
 	}
 
 	return kubernetes.NewForConfig(config)
-}
-
-func decodeString(val string) ([]byte, error) {
-	return base64.StdEncoding.DecodeString(val)
 }
